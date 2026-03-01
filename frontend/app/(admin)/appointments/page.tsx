@@ -109,16 +109,14 @@ function SortableItem({
           {nextStatus[appt.status] === "in-progress" ? "Start" : "Done"}
         </Button>
       )}
-      {appt.status === "scheduled" && !isStaff && (
+      {appt.status === "scheduled" && (
         <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => onStatusChange(appt.id, "cancelled")}>
           Cancel
         </Button>
       )}
-      {!isStaff && (
-        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title="Remove from queue" onClick={() => onRemove(appt.id)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title="Remove from queue" onClick={() => onRemove(appt.id)}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

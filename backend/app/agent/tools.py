@@ -109,24 +109,25 @@ async def get_patient_info(clinic_id: str, doctor_id: str, query: str = "") -> s
 async def search_patient_in_queue(
     clinic_id: str,
     doctor_id: str,
-    name: str = "",
-    age: int | None = None,
+    patient_name: str = "",
 ) -> str:
-    """Search today's queue for a patient by name or age, and always report the current top of queue.
+    """Search today's appointment queue for patients matching a name, and always return the current head of queue.
 
-    IMPORTANT — use this tool whenever:
-    - The doctor asks about a specific patient by name or age.
-    - The doctor asks "who is my current patient" / "next patient" / "show current patient".
-    - Before updating a prescription for a named patient (to confirm you have the right person).
+    Use this tool whenever:
+    - The doctor mentions a patient by name (e.g. "Asish", "the patient called Priya").
+    - The doctor asks "who is next", "current patient", "who am I seeing now".
+    - You need to confirm which patient to update a prescription for.
 
     Args:
-        clinic_id: The clinic ID.
-        doctor_id: The doctor's ID.
-        name: Patient name to search (partial match). Leave empty to return full queue.
-        age: Patient age to filter. Leave None to ignore.
+        clinic_id: The clinic ID (injected automatically from session).
+        doctor_id: The doctor's ID (injected automatically from session).
+        patient_name: Patient name to search (partial match, case-insensitive).
+                      Leave empty to see the full queue and current head.
 
     Returns:
-        Structured text with search results from queue and the current top-of-queue patient.
+        Two clearly labelled sections:
+        1. "search keyword: ... | patient results from queue: [...]"  — all matching patients with last Rx summary.
+        2. "top of queue patient: {...}"                              — current in-progress or first scheduled patient with open draft Rx.
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     appts = await list_appointments(clinic_id, date=today, doctor_id=doctor_id)
@@ -161,13 +162,12 @@ async def search_patient_in_queue(
             if patient.get("notes"): entry["notes"] = patient["notes"]
         return entry
 
-    # Filter candidates by search keyword
+    # Filter candidates by name
     candidates = ranked
-    if name.strip():
-        nl = name.strip().lower()
+    name = patient_name  # alias for rest of function
+    if patient_name.strip():
+        nl = patient_name.strip().lower()
         candidates = [a for a in candidates if nl in (a.get("patientName") or "").lower()]
-    if age is not None:
-        candidates = [a for a in candidates if _age_match(a.get("patientId", ""), age, clinic_id)]
 
     # Build search results list
     search_results = []
@@ -217,11 +217,8 @@ async def search_patient_in_queue(
         f"top of queue patient: {_json.dumps(top_summary, ensure_ascii=False)}",
     ]
 
-    if not search_results and (name or age is not None):
-        hint = []
-        if name: hint.append(f"name '{name}'")
-        if age is not None: hint.append(f"age {age}")
-        lines.insert(0, f"No patient found in queue matching {' and '.join(hint)}.")
+    if not search_results and patient_name.strip():
+        lines.insert(0, f"No patient found in today's queue matching name '{patient_name}'.")
 
     return "\n".join(lines)
 
@@ -376,7 +373,7 @@ async def finalize_prescription(
     if not result:
         return f"Failed to finalize prescription for {name}."
 
-    # Mark printedAt (non-blocking — finalize already succeeded above)
+    # Mark printedAt + request auto-print (non-blocking)
     try:
         now = datetime.now(timezone.utc).isoformat()
         db = get_db()
@@ -386,7 +383,7 @@ async def finalize_prescription(
             .collection("prescriptions")
             .document(rx_id)
         )
-        await _asyncio.to_thread(ref.update, {"printedAt": now})
+        await _asyncio.to_thread(ref.update, {"printedAt": now, "printRequested": True})
     except Exception:
         pass
 
