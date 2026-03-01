@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -56,6 +56,16 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   const { selectedDoctorId } = useDoctorContext();
   const router = useRouter();
   const pathname = usePathname();
+  const [clinicName, setClinicName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clinicId) return;
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    fetch(`${API}/api/clinics/${clinicId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data?.name && setClinicName(data.name))
+      .catch(() => {});
+  }, [clinicId]);
 
   const navItems = [
     ...BASE_NAV,
@@ -81,10 +91,15 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="flex w-64 flex-col border-r bg-white shadow-sm">
-        <div className="flex h-16 items-center gap-2 border-b px-6">
-          <Stethoscope className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold tracking-tight">Dia</span>
-          <span className="text-xs text-muted-foreground font-normal">Doctor Assistant</span>
+        <div className="flex flex-col justify-center border-b px-6 py-3 min-h-[4rem]">
+          <div className="flex items-center gap-2">
+            <Stethoscope className="h-5 w-5 text-primary shrink-0" />
+            <span className="text-base font-bold tracking-tight">Dia</span>
+            <span className="text-xs text-muted-foreground font-normal">Doctor Assistant</span>
+          </div>
+          {clinicName && (
+            <p className="text-xs font-medium text-primary truncate mt-0.5 pl-7">{clinicName}</p>
+          )}
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map(({ href, label, icon: Icon }) => (
