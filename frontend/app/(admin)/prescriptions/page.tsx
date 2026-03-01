@@ -42,7 +42,17 @@ const TODAY = format(new Date(), "yyyy-MM-dd");
 export default function PrescriptionsPage() {
   const { clinicId, role } = useAuth();
   const isStaff = role === "staff";
-  const { selectedDoctorId } = useDoctorContext();
+  const { selectedDoctorId, selectedDoctor } = useDoctorContext();
+  const [clinicInfo, setClinicInfo] = useState<{ name?: string; address?: string; phone?: string } | null>(null);
+
+  useEffect(() => {
+    if (!clinicId) return;
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    fetch(`${API}/api/clinics/${clinicId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d && setClinicInfo({ name: d.name, address: d.address, phone: d.phone }))
+      .catch(() => {});
+  }, [clinicId]);
   const [allRx, setAllRx] = useState<Prescription[]>([]);
   const [selected, setSelected] = useState<Prescription | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -216,7 +226,15 @@ export default function PrescriptionsPage() {
       </div>
 
       {printing && selected && (
-        <PrescriptionPrint prescription={selected} onClose={() => setPrinting(false)} />
+        <PrescriptionPrint
+          prescription={selected}
+          onClose={() => setPrinting(false)}
+          clinicName={clinicInfo?.name}
+          clinicAddress={clinicInfo?.address}
+          clinicPhone={clinicInfo?.phone}
+          doctorName={selectedDoctor?.name}
+          doctorSpecialization={selectedDoctor?.specialization}
+        />
       )}
     </div>
   );

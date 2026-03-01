@@ -112,8 +112,7 @@ async def search_patient_in_queue(
     name: str = "",
     age: int | None = None,
 ) -> str:
-    """Search today's queue for a patient by name, age, or both, then return their full profile
-    and open draft prescription. If both name and age are empty, returns the current head of queue.
+    """Search today's queue for a patient by name or age, and always report the current top of queue.
 
     IMPORTANT — use this tool whenever:
     - The doctor asks about a specific patient by name or age.
@@ -123,72 +122,106 @@ async def search_patient_in_queue(
     Args:
         clinic_id: The clinic ID.
         doctor_id: The doctor's ID.
-        name: Patient name to search (partial match). Leave empty to use head of queue.
+        name: Patient name to search (partial match). Leave empty to return full queue.
         age: Patient age to filter. Leave None to ignore.
 
     Returns:
-        Patient profile, queue position, and most recent prescription summary.
+        Structured text with search results from queue and the current top-of-queue patient.
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     appts = await list_appointments(clinic_id, date=today, doctor_id=doctor_id)
     if not appts:
-        return "No patients in today's queue."
+        return "No patients in today's queue.\ntop of queue patient: none"
 
     ranked = sorted(appts, key=lambda x: x.get("queuePosition", 999))
-    candidates = ranked
 
+    # Determine top of queue (in-progress first, else first scheduled)
+    top_appt = (
+        next((a for a in ranked if a.get("status") == "in-progress"), None)
+        or next((a for a in ranked if a.get("status") == "scheduled"), None)
+    )
+
+    # Fetch full patient details for top-of-queue
+    async def _enrich(appt: dict) -> dict:
+        pid = appt.get("patientId", "")
+        pname = appt.get("patientName", "")
+        patients = await list_patients(clinic_id, search=pname)
+        patient = next((p for p in patients if p.get("id") == pid), None)
+        entry: dict = {
+            "queue_position": appt.get("queuePosition"),
+            "status": appt.get("status"),
+            "name": pname,
+            "patient_id": pid,
+        }
+        if patient:
+            if patient.get("age"): entry["age"] = patient["age"]
+            if patient.get("gender"): entry["gender"] = patient["gender"]
+            if patient.get("phone"): entry["phone"] = patient["phone"]
+            entry["visits"] = patient.get("visits", 0)
+            if patient.get("notes"): entry["notes"] = patient["notes"]
+        return entry
+
+    # Filter candidates by search keyword
+    candidates = ranked
     if name.strip():
         nl = name.strip().lower()
         candidates = [a for a in candidates if nl in (a.get("patientName") or "").lower()]
     if age is not None:
         candidates = [a for a in candidates if _age_match(a.get("patientId", ""), age, clinic_id)]
 
-    if not candidates:
+    # Build search results list
+    search_results = []
+    for appt in candidates:
+        entry = await _enrich(appt)
+        # Append most recent prescription summary
+        rxs = await list_prescriptions(clinic_id, patient_id=entry["patient_id"])
+        if rxs:
+            recent = sorted(rxs, key=lambda x: x.get("date", ""), reverse=True)[0]
+            c = recent.get("content", {})
+            entry["last_rx"] = {
+                "date": recent.get("date"),
+                "status": recent.get("status"),
+                "complaints": c.get("complaints", []),
+                "diagnosis": c.get("diagnosis", []),
+                "medications": [
+                    f"{m.get('name')} {m.get('dosage')} {m.get('frequency')} for {m.get('duration')}"
+                    for m in c.get("medications", [])
+                ],
+            }
+        search_results.append(entry)
+
+    # Build top-of-queue summary
+    top_summary: dict | str = "none"
+    if top_appt:
+        top_summary = await _enrich(top_appt)
+        rxs = await list_prescriptions(clinic_id, patient_id=top_summary["patient_id"])
+        open_rx = next((r for r in rxs if r.get("status") == "draft"), None)
+        if open_rx:
+            c = open_rx.get("content", {})
+            top_summary["open_draft_rx"] = {
+                "rx_id": open_rx.get("id", "")[-8:].upper(),
+                "complaints": c.get("complaints", []),
+                "diagnosis": c.get("diagnosis", []),
+                "medications": [
+                    f"{m.get('name')} {m.get('dosage')} {m.get('frequency')} for {m.get('duration')}"
+                    for m in c.get("medications", [])
+                ],
+                "tests": c.get("tests", []),
+                "follow_up": c.get("followUp", ""),
+                "notes": c.get("notes", ""),
+            }
+
+    keyword = name.strip() or "(all)"
+    lines = [
+        f"search keyword: \"{keyword}\" | patient results from queue: {_json.dumps(search_results, ensure_ascii=False)}",
+        f"top of queue patient: {_json.dumps(top_summary, ensure_ascii=False)}",
+    ]
+
+    if not search_results and (name or age is not None):
         hint = []
         if name: hint.append(f"name '{name}'")
         if age is not None: hint.append(f"age {age}")
-        return f"No patient in today's queue matching {' and '.join(hint)}."
-
-    # Pick best match (in-progress first, else first scheduled)
-    match = (
-        next((a for a in candidates if a.get("status") == "in-progress"), None)
-        or candidates[0]
-    )
-
-    patient_id = match.get("patientId")
-    patient_name = match.get("patientName", "Unknown")
-    queue_pos = match.get("queuePosition", "?")
-    appt_status = match.get("status", "scheduled")
-
-    # Fetch full patient record for age/gender
-    patients = await list_patients(clinic_id, search=patient_name)
-    patient = next((p for p in patients if p.get("id") == patient_id), None)
-
-    lines = []
-    if patient:
-        parts = [patient.get("name", patient_name)]
-        if patient.get("age"): parts.append(f"{patient.get('age')}y")
-        if patient.get("gender"): parts.append(patient.get("gender"))
-        if patient.get("phone"): parts.append(patient.get("phone"))
-        lines.append(f"queue#{queue_pos} ({appt_status}): " + ", ".join(parts))
-        lines.append(f"visits: {patient.get('visits', 0)}")
-        if patient.get("notes"): lines.append(f"notes: {patient.get('notes')}")
-    else:
-        lines.append(f"queue#{queue_pos}: {patient_name}")
-
-    rxs = await list_prescriptions(clinic_id, patient_id=patient_id)
-    if rxs:
-        recent = sorted(rxs, key=lambda x: x.get("date", ""), reverse=True)[:3]
-        for rx in recent:
-            c = rx.get("content", {})
-            st = "final" if rx.get("status") == "final" else "draft"
-            cx = ", ".join(c.get("complaints", [])) or "none"
-            dx = ", ".join(c.get("diagnosis", [])) or "none"
-            meds = c.get("medications", [])
-            mx = "; ".join(f"{m.get('name')} {m.get('dosage')}" for m in meds) or "none"
-            lines.append(f"{rx.get('date')} ({st}): {cx} | {dx} | {mx}")
-    else:
-        lines.append("no prescriptions on record")
+        lines.insert(0, f"No patient found in queue matching {' and '.join(hint)}.")
 
     return "\n".join(lines)
 

@@ -6,10 +6,20 @@ import type { Prescription } from "@/app/(admin)/prescriptions/page";
 interface Props {
   prescription: Prescription;
   onClose: () => void;
+  clinicName?: string;
+  clinicAddress?: string;
+  clinicPhone?: string;
+  doctorName?: string;
+  doctorSpecialization?: string;
 }
 
-export default function PrescriptionPrint({ prescription, onClose }: Props) {
+export default function PrescriptionPrint({
+  prescription, onClose,
+  clinicName, clinicAddress, clinicPhone,
+  doctorName, doctorSpecialization,
+}: Props) {
   const { content, date, id } = prescription;
+  const pi = content.patientInfo ?? {};
 
   useEffect(() => {
     const timer = setTimeout(() => window.print(), 300);
@@ -32,12 +42,42 @@ export default function PrescriptionPrint({ prescription, onClose }: Props) {
         </button>
 
         <div className="mx-auto max-w-[21cm] font-serif">
-          <div className="mb-6 border-b-2 border-gray-800 pb-4">
-            <h1 className="text-2xl font-bold text-gray-900">Medical Prescription</h1>
-            <div className="mt-1 flex gap-6 text-sm text-gray-600">
-              <span>Rx ID: {id.slice(-8).toUpperCase()}</span>
-              <span>Date: {date}</span>
-              <span>Status: {prescription.status.toUpperCase()}</span>
+
+          {/* ── Clinic header ── */}
+          <div className="mb-4 border-b-2 border-gray-800 pb-4 text-center">
+            <h1 className="text-2xl font-bold text-gray-900">{clinicName ?? "Clinic"}</h1>
+            {(clinicAddress || clinicPhone) && (
+              <p className="mt-0.5 text-sm text-gray-500">
+                {[clinicAddress, clinicPhone].filter(Boolean).join("  |  ")}
+              </p>
+            )}
+          </div>
+
+          {/* ── Doctor + Rx meta row ── */}
+          <div className="mb-4 flex items-start justify-between border-b pb-3">
+            <div className="text-sm text-gray-700">
+              <p className="font-semibold text-gray-900">
+                Dr. {doctorName ?? "—"}
+                {doctorSpecialization && (
+                  <span className="ml-2 font-normal text-gray-500">({doctorSpecialization})</span>
+                )}
+              </p>
+            </div>
+            <div className="text-right text-xs text-gray-500 space-y-0.5">
+              <p><span className="font-medium text-gray-700">Rx #:</span> {id.slice(-8).toUpperCase()}</p>
+              <p><span className="font-medium text-gray-700">Date:</span> {date}</p>
+              <p><span className="font-medium text-gray-700">Status:</span> {prescription.status.toUpperCase()}</p>
+            </div>
+          </div>
+
+          {/* ── Patient details ── */}
+          <div className="mb-5 rounded border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm">
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">Patient</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-gray-800">
+              <span><span className="font-medium">Name:</span> {pi.name ?? "—"}</span>
+              {pi.age && <span><span className="font-medium">Age:</span> {pi.age} yrs</span>}
+              {pi.gender && <span><span className="font-medium">Gender:</span> {pi.gender}</span>}
+              {pi.phone && <span><span className="font-medium">Phone:</span> {pi.phone}</span>}
             </div>
           </div>
 
