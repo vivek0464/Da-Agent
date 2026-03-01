@@ -15,7 +15,7 @@ def _patient_id(name: str, phone: str) -> str:
     return f"{first}_{digits}"
 
 
-async def create_patient(data: PatientCreate, doctor_id: str | None = None, date: str | None = None) -> dict:
+async def create_patient(data: PatientCreate, doctor_id: str | None = None, date: str | None = None, estimated_time: str | None = None) -> dict:
     db = get_db()
     clinic_id = data.clinicId
     now = datetime.now(timezone.utc).isoformat()
@@ -76,7 +76,7 @@ async def create_patient(data: PatientCreate, doctor_id: str | None = None, date
                 "timeSlot": "walk-in",
                 "status": "scheduled",
                 "queuePosition": queue_pos,
-                "estimatedTime": f"~{queue_pos * 5} min wait",
+                "estimatedTime": estimated_time or f"~{queue_pos * 5} min wait",
                 "paymentStatus": "unpaid",
                 "createdAt": now,
             }

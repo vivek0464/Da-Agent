@@ -15,6 +15,7 @@ interface ClinicInfo {
   clinicPhone?: string;
   doctors: DoctorInfo[];
 }
+interface TimeSlot { start: string; end: string; }
 
 type Step = "select-doctor" | "form" | "submitting" | "success" | "error";
 
@@ -26,6 +27,13 @@ const DATES = Array.from({ length: 7 }, (_, i) => {
   return { value: format(d, "yyyy-MM-dd"), label: i === 0 ? "Today" : format(d, "EEE, MMM d") };
 });
 
+function fmtSlotTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${period}`;
+}
+
 export default function ClinicPage() {
   const { slug } = useParams<{ slug: string }>();
   const [info, setInfo] = useState<ClinicInfo | null>(null);
@@ -35,8 +43,13 @@ export default function ClinicPage() {
 
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorInfo | null>(null);
   const [selectedDate, setSelectedDate] = useState(DATES[0].value);
+  const [doctorSlots, setDoctorSlots] = useState<TimeSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", age: "", gender: "" });
-  const [result, setResult] = useState<{ name: string; doctor: string; queue: number | null; date: string; estimatedTime?: string } | null>(null);
+  const [result, setResult] = useState<{
+    name: string; doctor: string; queue: number | null; date: string;
+    estimatedTime?: string; slotLabel?: string; altTime?: string; altSlotLabel?: string;
+  } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -53,6 +66,17 @@ export default function ClinicPage() {
     };
     load();
   }, [slug]);
+
+  // Fetch doctor slots when doctor or date changes
+  useEffect(() => {
+    if (!selectedDoctor || !slug) { setDoctorSlots([]); return; }
+    setLoadingSlots(true);
+    fetch(`${API}/api/register/clinic/${slug}/slots?doctor_id=${selectedDoctor.id}&date=${selectedDate}`)
+      .then((r) => r.ok ? r.json() : { slots: [] })
+      .then((d) => setDoctorSlots(d.slots ?? []))
+      .catch(() => setDoctorSlots([]))
+      .finally(() => setLoadingSlots(false));
+  }, [selectedDoctor, selectedDate, slug]);
 
   const handleDoctorSelect = (doc: DoctorInfo) => {
     setSelectedDoctor(doc);
@@ -86,8 +110,11 @@ export default function ClinicPage() {
         name: form.name.trim(),
         doctor: selectedDoctor.name,
         queue: qPos,
-        date: selectedDate,
-        estimatedTime: qPos ? `~${qPos * 5} min wait` : undefined,
+        date: data.date ?? selectedDate,
+        estimatedTime: data.estimatedTime ?? undefined,
+        slotLabel: data.slotLabel ?? undefined,
+        altTime: data.altTime ?? undefined,
+        altSlotLabel: data.altSlotLabel ?? undefined,
       });
       setStep("success");
     } catch (err: unknown) {
@@ -173,9 +200,21 @@ export default function ClinicPage() {
                       <span className="text-2xl font-bold text-primary">#{result.queue}</span>
                     </div>
                     {result.estimatedTime && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Estimated wait</span>
-                        <span className="font-medium text-orange-600">{result.estimatedTime}</span>
+                      <div className="space-y-1.5 pt-1 border-t">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Estimated time</span>
+                          <span className="font-semibold text-orange-600">~{result.estimatedTime}</span>
+                        </div>
+                        {result.slotLabel && (
+                          <p className="text-xs text-muted-foreground text-right">Slot: {result.slotLabel}</p>
+                        )}
+                        {result.altTime && (
+                          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 space-y-0.5">
+                            <p className="font-medium">⚠ Near end of morning slot</p>
+                            <p>You may be seen at <span className="font-semibold">~{result.estimatedTime}</span>, or in the next slot at <span className="font-semibold">{result.altTime}</span></p>
+                            {result.altSlotLabel && <p className="text-amber-600">Next slot: {result.altSlotLabel}</p>}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -252,6 +291,27 @@ export default function ClinicPage() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Doctor availability slots */}
+                <div className="rounded-lg border bg-blue-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-blue-700 mb-1.5 flex items-center gap-1">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Doctor&apos;s hours on {selectedDate}
+                  </p>
+                  {loadingSlots ? (
+                    <p className="text-xs text-blue-500">Loading…</p>
+                  ) : doctorSlots.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No schedule set for this date.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {doctorSlots.map((s, i) => (
+                        <span key={i} className="rounded-full bg-white border border-blue-200 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                          {fmtSlotTime(s.start)} – {fmtSlotTime(s.end)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
