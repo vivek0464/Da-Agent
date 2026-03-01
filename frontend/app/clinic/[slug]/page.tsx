@@ -36,7 +36,7 @@ export default function ClinicPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorInfo | null>(null);
   const [selectedDate, setSelectedDate] = useState(DATES[0].value);
   const [form, setForm] = useState({ name: "", phone: "", age: "", gender: "" });
-  const [result, setResult] = useState<{ name: string; doctor: string; queue: number | null; date: string } | null>(null);
+  const [result, setResult] = useState<{ name: string; doctor: string; queue: number | null; date: string; estimatedTime?: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -81,11 +81,13 @@ export default function ClinicPage() {
         throw new Error(err.detail ?? "Registration failed");
       }
       const data = await res.json();
+      const qPos = data.queuePosition ?? null;
       setResult({
         name: form.name.trim(),
         doctor: selectedDoctor.name,
-        queue: data.queuePosition ?? null,
+        queue: qPos,
         date: selectedDate,
+        estimatedTime: qPos ? `~${qPos * 5} min wait` : undefined,
       });
       setStep("success");
     } catch (err: unknown) {
@@ -165,10 +167,18 @@ export default function ClinicPage() {
                   <span className="font-medium">{result.date}</span>
                 </div>
                 {result.queue && (
-                  <div className="flex justify-between items-center pt-1 border-t">
-                    <span className="text-muted-foreground">Queue position</span>
-                    <span className="text-2xl font-bold text-primary">#{result.queue}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between items-center pt-1 border-t">
+                      <span className="text-muted-foreground">Queue position</span>
+                      <span className="text-2xl font-bold text-primary">#{result.queue}</span>
+                    </div>
+                    {result.estimatedTime && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Estimated wait</span>
+                        <span className="font-medium text-orange-600">{result.estimatedTime}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">

@@ -76,7 +76,8 @@ async def create_patient(data: PatientCreate, doctor_id: str | None = None, date
                 "timeSlot": "walk-in",
                 "status": "scheduled",
                 "queuePosition": queue_pos,
-                "estimatedTime": f"~{queue_pos * 15} min wait",
+                "estimatedTime": f"~{queue_pos * 5} min wait",
+                "paymentStatus": "unpaid",
                 "createdAt": now,
             }
             await asyncio.to_thread(appt_ref.set, appt_doc)

@@ -37,15 +37,14 @@ async def create_appointment(data: AppointmentCreate) -> dict:
     )
     now = datetime.now(timezone.utc).isoformat()
 
-    existing = await list_appointments(data.clinicId, date=data.date)
+    existing = await list_appointments(data.clinicId, date=data.date, doctor_id=data.doctorId)
     active = [
         a
         for a in existing
         if a.get("status") not in ("cancelled", "completed")
     ]
     queue_pos = len(active) + 1
-    estimated_minutes = queue_pos * 15
-    estimated_time = f"~{estimated_minutes} min wait"
+    estimated_time = f"~{queue_pos * 5} min wait"
 
     doc = {
         **data.model_dump(),
@@ -53,6 +52,7 @@ async def create_appointment(data: AppointmentCreate) -> dict:
         "queuePosition": queue_pos,
         "status": AppointmentStatus.scheduled.value,
         "estimatedTime": estimated_time,
+        "paymentStatus": "unpaid",
         "createdAt": now,
     }
     await asyncio.to_thread(ref.set, doc)
