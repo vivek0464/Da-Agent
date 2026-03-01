@@ -16,7 +16,8 @@ import {
 import { useAuth } from "@/app/lib/auth-context";
 import { DoctorProvider, useDoctorContext } from "@/app/lib/doctor-context";
 import { cn } from "@/app/lib/utils";
-import VoiceButton from "@/app/components/voice-button";
+import dynamic from "next/dynamic";
+const VoiceButton = dynamic(() => import("@/app/components/voice-button"), { ssr: false, loading: () => null });
 
 const BASE_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
