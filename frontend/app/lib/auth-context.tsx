@@ -26,6 +26,7 @@ interface AuthContextValue {
   staffId: string | null;
   isPlatformAdmin: boolean;
   role: "platform_admin" | "doctor" | "staff" | null;
+  authError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextValue>({
   staffId: null,
   isPlatformAdmin: false,
   role: null,
+  authError: null,
   signIn: async () => {},
   signInWithGoogle: async () => {},
   signOut: async () => {},
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [staffId, setStaffId] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [role, setRole] = useState<"platform_admin" | "doctor" | "staff" | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
@@ -73,16 +76,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // Force token refresh to pull in new claims
               idTokenResult = await firebaseUser.getIdTokenResult(true);
               claims = idTokenResult.claims as Record<string, unknown>;
+            } else {
+              // Email not registered in any clinic — reject
+              const body = await res.json().catch(() => ({}));
+              const msg = (body as { detail?: string }).detail
+                ?? "This Google account is not registered with any clinic. Contact your platform admin.";
+              await firebaseSignOut(auth!);
+              setAuthError(msg);
+              setLoading(false);
+              return;
             }
           } catch {
-            // Link failed (user not in any clinic) — claims stay empty
+            // Network error — allow through, will show no-role state
           }
+        }
+
+        // After linking, if still no role, reject
+        const isAdmin = Boolean(claims.platform_admin);
+        const hasRole = isAdmin || Boolean(claims.clinicId);
+        if (!hasRole) {
+          await firebaseSignOut(auth!);
+          setAuthError("This Google account is not registered with any clinic. Contact your platform admin.");
+          setLoading(false);
+          return;
         }
 
         setClinicId((claims.clinicId as string) ?? null);
         setDoctorId((claims.doctorId as string) ?? null);
         setStaffId((claims.staffId as string) ?? null);
-        const isAdmin = Boolean(claims.platform_admin);
         setIsPlatformAdmin(isAdmin);
         if (isAdmin) setRole("platform_admin");
         else if (claims.doctorId) setRole("doctor");
@@ -90,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         else setRole(null);
         document.cookie = `firebaseToken=${await firebaseUser.getIdToken()}; path=/; max-age=3600; SameSite=Strict`;
       } else {
+        setUser(null);
         setClinicId(null);
         setDoctorId(null);
         setStaffId(null);
@@ -105,11 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (!auth) throw new Error("Firebase not configured");
+    setAuthError(null);
     await signInWithEmailAndPassword(auth, email, password);
   };
 
   const signInWithGoogle = async () => {
     if (!auth) throw new Error("Firebase not configured");
+    setAuthError(null);
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   };
@@ -121,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, clinicId, doctorId, staffId, isPlatformAdmin, role, signIn, signInWithGoogle, signOut }}
+      value={{ user, loading, clinicId, doctorId, staffId, isPlatformAdmin, role, authError, signIn, signInWithGoogle, signOut }}
     >
       {children}
     </AuthContext.Provider>

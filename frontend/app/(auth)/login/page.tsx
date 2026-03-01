@@ -26,7 +26,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, authError } = useAuth();
   const router = useRouter();
 
   const handleGoogle = async () => {
@@ -83,8 +83,8 @@ export default function LoginPage() {
             Continue with Google
           </Button>
 
-          {error && (
-            <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
+          {(error || authError) && (
+            <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{authError || error}</p>
           )}
 
           {/* Divider */}

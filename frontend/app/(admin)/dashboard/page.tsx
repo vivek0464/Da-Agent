@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/lib/auth-context";
+import { api } from "@/app/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { CalendarClock, Users, CheckCircle2, Clock, AlertCircle } from "lucide-react";
@@ -29,7 +30,15 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 export default function DashboardPage() {
   const { clinicId } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [clinicName, setClinicName] = useState<string | null>(null);
   const today = format(new Date(), "yyyy-MM-dd");
+
+  useEffect(() => {
+    if (!clinicId) return;
+    api.get<{ name: string }>(`/api/clinics/${clinicId}`)
+      .then((c) => setClinicName(c.name))
+      .catch(() => {});
+  }, [clinicId]);
 
   useEffect(() => {
     if (!clinicId || !db) return;
@@ -59,7 +68,10 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          {clinicName && <p className="text-sm text-muted-foreground">{clinicName}</p>}
+        </div>
         <div className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 shadow-sm">
           <CalendarClock className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">{format(new Date(), "EEEE, MMMM d, yyyy")}</span>

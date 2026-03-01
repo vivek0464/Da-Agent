@@ -26,7 +26,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ChevronRight, CalendarPlus, Trash2 } from "lucide-react";
+import { GripVertical, ChevronRight, CalendarPlus, Trash2, IndianRupee } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/app/components/ui/toaster";
 
@@ -40,6 +40,7 @@ interface Appointment {
   estimatedTime: string;
   doctorId: string;
   date: string;
+  paymentStatus: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -49,7 +50,16 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800",
 };
 
-function SortableItem({ appt, onStatusChange, onRemove }: { appt: Appointment; onStatusChange: (id: string, status: string) => void; onRemove: (id: string) => void }) {
+function SortableItem({
+  appt, waitMins, onStatusChange, onPaymentToggle, onRemove, isStaff,
+}: {
+  appt: Appointment;
+  waitMins: number;
+  onStatusChange: (id: string, status: string) => void;
+  onPaymentToggle: (id: string, current: string) => void;
+  onRemove: (id: string) => void;
+  isStaff: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: appt.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
@@ -57,6 +67,9 @@ function SortableItem({ appt, onStatusChange, onRemove }: { appt: Appointment; o
     scheduled: "in-progress",
     "in-progress": "completed",
   };
+
+  const isPaid = appt.paymentStatus === "paid";
+  const waitLabel = waitMins === 0 ? "Now" : `~${waitMins}m wait`;
 
   return (
     <div
@@ -72,8 +85,21 @@ function SortableItem({ appt, onStatusChange, onRemove }: { appt: Appointment; o
       </span>
       <div className="flex-1 min-w-0">
         <p className="font-medium truncate">{appt.patientName}</p>
-        <p className="text-xs text-muted-foreground">{appt.timeSlot} · {appt.patientPhone}</p>
+        <p className="text-xs text-muted-foreground">{appt.patientPhone} · <span className="text-primary font-medium">{waitLabel}</span></p>
       </div>
+      {/* Paid / Unpaid toggle */}
+      <button
+        onClick={() => onPaymentToggle(appt.id, appt.paymentStatus)}
+        title={isPaid ? "Mark as Unpaid" : "Mark as Paid"}
+        className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+          isPaid
+            ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+            : "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"
+        }`}
+      >
+        <IndianRupee className="h-3 w-3" />
+        {isPaid ? "Paid" : "Unpaid"}
+      </button>
       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] ?? "bg-gray-100 text-gray-800"}`}>
         {appt.status}
       </span>
@@ -83,21 +109,24 @@ function SortableItem({ appt, onStatusChange, onRemove }: { appt: Appointment; o
           {nextStatus[appt.status] === "in-progress" ? "Start" : "Done"}
         </Button>
       )}
-      {appt.status === "scheduled" && (
+      {appt.status === "scheduled" && !isStaff && (
         <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => onStatusChange(appt.id, "cancelled")}>
           Cancel
         </Button>
       )}
-      <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title="Remove from queue" onClick={() => onRemove(appt.id)}>
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
+      {!isStaff && (
+        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title="Remove from queue" onClick={() => onRemove(appt.id)}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
 
 export default function AppointmentsPage() {
-  const { clinicId } = useAuth();
+  const { clinicId, role } = useAuth();
   const { selectedDoctorId, selectedDoctor } = useDoctorContext();
+  const isStaff = role === "staff";
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
@@ -123,6 +152,16 @@ export default function AppointmentsPage() {
       toast({ title: "Updated", description: `Appointment marked as ${status}` });
     } catch {
       toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+    }
+  }, [clinicId]);
+
+  const handlePaymentToggle = useCallback(async (id: string, current: string) => {
+    if (!clinicId) return;
+    const paymentStatus = current === "paid" ? "unpaid" : "paid";
+    try {
+      await api.patch(`/api/clinics/${clinicId}/appointments/${id}`, { paymentStatus });
+    } catch {
+      toast({ title: "Error", description: "Failed to update payment status", variant: "destructive" });
     }
   }, [clinicId]);
 
@@ -181,9 +220,18 @@ export default function AppointmentsPage() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={appointments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-2">
-                  {appointments.map((appt) => (
-                    <SortableItem key={appt.id} appt={appt} onStatusChange={handleStatusChange} onRemove={handleRemove} />
-                  ))}
+                  {appointments.map((appt, idx) => {
+                    const ahead = appointments.slice(0, idx).filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
+                    const waitMins = ahead * 5;
+                    return (
+                      <SortableItem key={appt.id} appt={appt} waitMins={waitMins}
+                        onStatusChange={handleStatusChange}
+                        onPaymentToggle={handlePaymentToggle}
+                        onRemove={handleRemove}
+                        isStaff={isStaff}
+                      />
+                    );
+                  })}
                 </div>
               </SortableContext>
             </DndContext>

@@ -32,6 +32,7 @@ class AppointmentUpdate(BaseModel):
     doctorId: Optional[str] = None
     date: Optional[str] = None
     timeSlot: Optional[str] = None
+    paymentStatus: Optional[str] = None
 
 
 class Appointment(AppointmentBase):
@@ -40,6 +41,7 @@ class Appointment(AppointmentBase):
     queuePosition: int = 0
     status: AppointmentStatus = AppointmentStatus.scheduled
     estimatedTime: Optional[str] = None
+    paymentStatus: str = "unpaid"
     createdAt: Optional[str] = None
 
     model_config = {"from_attributes": True}

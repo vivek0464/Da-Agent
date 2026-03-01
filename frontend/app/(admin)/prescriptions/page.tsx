@@ -40,7 +40,8 @@ export interface Prescription {
 const TODAY = format(new Date(), "yyyy-MM-dd");
 
 export default function PrescriptionsPage() {
-  const { clinicId } = useAuth();
+  const { clinicId, role } = useAuth();
+  const isStaff = role === "staff";
   const { selectedDoctorId } = useDoctorContext();
   const [allRx, setAllRx] = useState<Prescription[]>([]);
   const [selected, setSelected] = useState<Prescription | null>(null);
@@ -134,7 +135,7 @@ export default function PrescriptionsPage() {
         <div className="p-3 space-y-2 border-b">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Prescriptions</h2>
-            <Button size="sm" onClick={handleCreate}><FilePlus className="h-4 w-4" /></Button>
+            {!isStaff && <Button size="sm" onClick={handleCreate}><FilePlus className="h-4 w-4" /></Button>}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -186,7 +187,7 @@ export default function PrescriptionsPage() {
                 <Badge variant={selected.status === "final" ? "success" : "warning"}>{selected.status}</Badge>
               </div>
               <div className="flex items-center gap-2">
-                {selected.status !== "final" && (
+                {selected.status !== "final" && !isStaff && (
                   <Button size="sm" variant="outline" onClick={handleFinalize}>
                     <Lock className="mr-1.5 h-3.5 w-3.5" />Finalize
                   </Button>
@@ -204,7 +205,7 @@ export default function PrescriptionsPage() {
               </div>
             </div>
             <div className="flex-1 overflow-auto p-6">
-              <PrescriptionEditor prescription={selected} onSave={handleSave} readOnly={selected.status === "final"} />
+              <PrescriptionEditor prescription={selected} onSave={handleSave} readOnly={selected.status === "final" || isStaff} />
             </div>
           </div>
         ) : (
