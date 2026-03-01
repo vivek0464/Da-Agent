@@ -58,7 +58,7 @@ class Doctor(DoctorBase):
 class StaffBase(BaseModel):
     name: str
     email: str
-    phone: str
+    phone: Optional[str] = ""
     role: str = "staff"
 
 
