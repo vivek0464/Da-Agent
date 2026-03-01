@@ -100,3 +100,34 @@ async def update_prescription(
             pass
 
     return result
+
+
+async def list_print_queue(clinic_id: str, doctor_id: str | None = None) -> list:
+    """Return prescriptions where printQueued=True, filtered by doctor client-side."""
+    db = get_db()
+    query = (
+        db.collection("clinics")
+        .document(clinic_id)
+        .collection("prescriptions")
+        .where("printQueued", "==", True)
+    )
+    docs = await asyncio.to_thread(lambda: list(query.stream()))
+    results = [d.to_dict() for d in docs]
+    if doctor_id:
+        results = [r for r in results if r.get("doctorId") == doctor_id]
+    return results
+
+
+async def mark_printed(clinic_id: str, prescription_id: str) -> dict | None:
+    """Clear printQueued flag and stamp printedAt."""
+    db = get_db()
+    ref = (
+        db.collection("clinics")
+        .document(clinic_id)
+        .collection("prescriptions")
+        .document(prescription_id)
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    await asyncio.to_thread(ref.update, {"printQueued": False, "printedAt": now})
+    doc = await asyncio.to_thread(ref.get)
+    return doc.to_dict() if doc.exists else None

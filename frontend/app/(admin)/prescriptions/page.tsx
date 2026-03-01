@@ -33,7 +33,7 @@ export interface Prescription {
   date: string;
   status: string;
   content: PrescriptionContent;
-  printRequested?: boolean;
+  printQueued?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -57,7 +57,6 @@ export default function PrescriptionsPage() {
   const [allRx, setAllRx] = useState<Prescription[]>([]);
   const [selected, setSelected] = useState<Prescription | null>(null);
   const [printing, setPrinting] = useState(false);
-  const [autoPrintRx, setAutoPrintRx] = useState<Prescription | null>(null);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState(TODAY);
   const [dateTo, setDateTo] = useState(TODAY);
@@ -72,14 +71,6 @@ export default function PrescriptionsPage() {
       if (selectedDoctorId) data = data.filter((r) => r.doctorId === selectedDoctorId);
       setAllRx(data);
       setSelected((prev) => prev ? (data.find((r) => r.id === prev.id) ?? prev) : null);
-
-      // Auto-print: detect prescription finalized by agent with printRequested flag
-      const toPrint = data.find((r) => r.printRequested && r.status === "final");
-      if (toPrint) {
-        // Clear the flag immediately so we don't re-trigger
-        api.patch(`/api/clinics/${clinicId}/prescriptions/${toPrint.id}`, { printRequested: false }).catch(() => {});
-        setAutoPrintRx(toPrint);
-      }
     });
   }, [clinicId, selectedDoctorId]);
 
@@ -247,18 +238,6 @@ export default function PrescriptionsPage() {
         />
       )}
 
-      {/* Auto-print: triggered by agent finalize_prescription tool */}
-      {autoPrintRx && (
-        <PrescriptionPrint
-          prescription={autoPrintRx}
-          onClose={() => setAutoPrintRx(null)}
-          clinicName={clinicInfo?.name}
-          clinicAddress={clinicInfo?.address}
-          clinicPhone={clinicInfo?.phone}
-          doctorName={selectedDoctor?.name}
-          doctorSpecialization={selectedDoctor?.specialization}
-        />
-      )}
     </div>
   );
 }

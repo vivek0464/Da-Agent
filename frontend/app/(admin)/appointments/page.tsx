@@ -26,9 +26,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ChevronRight, CalendarPlus, Trash2, IndianRupee } from "lucide-react";
+import { GripVertical, ChevronRight, CalendarPlus, Trash2, IndianRupee, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/app/components/ui/toaster";
+import { useLang } from "@/app/lib/language-context";
 
 interface Appointment {
   id: string;
@@ -51,15 +52,15 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function SortableItem({
-  appt, waitMins, onStatusChange, onPaymentToggle, onRemove, isStaff,
+  appt, waitMins, onStatusChange, onPaymentToggle, onRemove,
 }: {
   appt: Appointment;
   waitMins: number;
   onStatusChange: (id: string, status: string) => void;
   onPaymentToggle: (id: string, current: string) => void;
   onRemove: (id: string) => void;
-  isStaff: boolean;
 }) {
+  const { t } = useLang();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: appt.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
@@ -69,7 +70,7 @@ function SortableItem({
   };
 
   const isPaid = appt.paymentStatus === "paid";
-  const waitLabel = waitMins === 0 ? "Now" : `~${waitMins}m wait`;
+  const waitLabel = waitMins === 0 ? t("appt_wait_now") : `~${waitMins}m ${t("appt_wait_mins")}`;
 
   return (
     <div
@@ -98,7 +99,7 @@ function SortableItem({
         }`}
       >
         <IndianRupee className="h-3 w-3" />
-        {isPaid ? "Paid" : "Unpaid"}
+        {isPaid ? t("appt_paid") : t("appt_unpaid")}
       </button>
       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] ?? "bg-gray-100 text-gray-800"}`}>
         {appt.status}
@@ -106,15 +107,15 @@ function SortableItem({
       {nextStatus[appt.status] && (
         <Button size="sm" variant="outline" onClick={() => onStatusChange(appt.id, nextStatus[appt.status])}>
           <ChevronRight className="h-3 w-3 mr-1" />
-          {nextStatus[appt.status] === "in-progress" ? "Start" : "Done"}
+          {nextStatus[appt.status] === "in-progress" ? t("appt_btn_start") : t("appt_btn_done")}
         </Button>
       )}
       {appt.status === "scheduled" && (
         <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => onStatusChange(appt.id, "cancelled")}>
-          Cancel
+          {t("appt_btn_cancel")}
         </Button>
       )}
-      <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title="Remove from queue" onClick={() => onRemove(appt.id)}>
+      <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" title={t("appt_btn_remove")} onClick={() => onRemove(appt.id)}>
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </div>
@@ -122,9 +123,9 @@ function SortableItem({
 }
 
 export default function AppointmentsPage() {
-  const { clinicId, role } = useAuth();
-  const { selectedDoctorId, selectedDoctor } = useDoctorContext();
-  const isStaff = role === "staff";
+  const { clinicId } = useAuth();
+  const { selectedDoctorId } = useDoctorContext();
+  const { t } = useLang();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
@@ -192,47 +193,86 @@ export default function AppointmentsPage() {
     }
   }, [appointments, clinicId, date]);
 
+  const activeAppts = appointments.filter((a) => a.status !== "completed" && a.status !== "cancelled");
+  const completedAppts = appointments.filter((a) => a.status === "completed");
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Appointments</h1>
-          <p className="text-muted-foreground">Drag to reorder the queue</p>
+          <h1 className="text-2xl font-bold">{t("appt_title")}</h1>
+          <p className="text-muted-foreground">{t("appt_subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
         </div>
       </div>
 
+      {/* ── Active Queue ──────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CalendarPlus className="h-5 w-5" />
-            Queue for {date} ({appointments.length} appointments)
+            {t("appt_queue_for")} {date} ({activeAppts.length} {t("appt_count")})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {appointments.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No appointments for this date.</p>
+          {activeAppts.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">{t("appt_empty")}</p>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={appointments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={activeAppts.map((a) => a.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-2">
-                  {appointments.map((appt, idx) => {
-                    const ahead = appointments.slice(0, idx).filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
-                    const waitMins = ahead * 5;
+                  {activeAppts.map((appt, idx) => {
+                    const waitMins = idx * 5;
                     return (
                       <SortableItem key={appt.id} appt={appt} waitMins={waitMins}
                         onStatusChange={handleStatusChange}
                         onPaymentToggle={handlePaymentToggle}
                         onRemove={handleRemove}
-                        isStaff={isStaff}
                       />
                     );
                   })}
                 </div>
               </SortableContext>
             </DndContext>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Completed Section ─────────────────────────────────────────────── */}
+      <Card className="border-green-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base text-green-700">
+            <CheckCircle2 className="h-4 w-4" />
+            {t("appt_completed_title")} ({completedAppts.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {completedAppts.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">{t("appt_completed_empty")}</p>
+          ) : (
+            <div className="space-y-2">
+              {completedAppts.map((appt) => (
+                <div key={appt.id}
+                  className="flex items-center gap-3 rounded-lg border border-green-100 bg-green-50 px-3 py-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">
+                    #{appt.queuePosition}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{appt.patientName}</p>
+                    <p className="text-xs text-muted-foreground">{appt.patientPhone}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${appt.paymentStatus === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                    {appt.paymentStatus === "paid" ? t("appt_paid") : t("appt_unpaid")}
+                  </span>
+                  <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                    {t("appt_status_completed")}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

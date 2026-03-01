@@ -5,6 +5,8 @@ from app.services.prescription_service import (
     get_prescription,
     list_prescriptions,
     update_prescription,
+    list_print_queue,
+    mark_printed,
 )
 from app.dependencies import require_auth
 
@@ -41,6 +43,21 @@ async def update_prescription_endpoint(
     clinic_id: str, prescription_id: str, data: PrescriptionUpdate
 ):
     rx = await update_prescription(clinic_id, prescription_id, data)
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    return rx
+
+
+@router.get("/print-queue", dependencies=[Depends(require_auth)])
+async def get_print_queue(
+    clinic_id: str, doctor_id: str | None = Query(None)
+):
+    return await list_print_queue(clinic_id, doctor_id=doctor_id)
+
+
+@router.post("/{prescription_id}/mark-printed", dependencies=[Depends(require_auth)])
+async def mark_prescription_printed(clinic_id: str, prescription_id: str):
+    rx = await mark_printed(clinic_id, prescription_id)
     if not rx:
         raise HTTPException(status_code=404, detail="Prescription not found")
     return rx

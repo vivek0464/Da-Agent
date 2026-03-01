@@ -383,7 +383,7 @@ async def finalize_prescription(
             .collection("prescriptions")
             .document(rx_id)
         )
-        await _asyncio.to_thread(ref.update, {"printedAt": now, "printRequested": True})
+        await _asyncio.to_thread(ref.update, {"printedAt": now, "printQueued": True})
     except Exception:
         pass
 

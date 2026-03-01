@@ -12,27 +12,23 @@ import {
   Building2,
   Settings,
   ChevronDown,
+  Printer,
 } from "lucide-react";
 import { useAuth } from "@/app/lib/auth-context";
 import { DoctorProvider, useDoctorContext } from "@/app/lib/doctor-context";
+import { LanguageProvider, useLang } from "@/app/lib/language-context";
 import { cn } from "@/app/lib/utils";
 import dynamic from "next/dynamic";
 const VoiceButton = dynamic(() => import("@/app/components/voice-button"), { ssr: false, loading: () => null });
 
-const BASE_NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/appointments", label: "Appointments", icon: CalendarClock },
-  { href: "/patients", label: "Patients", icon: Users },
-  { href: "/prescriptions", label: "Prescriptions", icon: FileText },
-];
-
 function DoctorSwitcher() {
   const { doctorId } = useAuth();
   const { selectedDoctorId, setSelectedDoctorId, clinicDoctors } = useDoctorContext();
+  const { t } = useLang();
   if (clinicDoctors.length <= 1) return null;
   return (
     <div className="px-3 pb-2">
-      <p className="text-xs text-muted-foreground mb-1">Viewing queue for</p>
+      <p className="text-xs text-muted-foreground mb-1">{t("nav_viewing_queue")}</p>
       <div className="relative">
         <select
           value={selectedDoctorId}
@@ -54,6 +50,7 @@ function DoctorSwitcher() {
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut, clinicId, doctorId, isPlatformAdmin, role } = useAuth();
   const { selectedDoctorId } = useDoctorContext();
+  const { t, lang, setLang } = useLang();
   const router = useRouter();
   const pathname = usePathname();
   const [clinicName, setClinicName] = useState<string | null>(null);
@@ -68,11 +65,15 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
   }, [clinicId]);
 
   const navItems = [
-    ...BASE_NAV,
+    { href: "/dashboard", label: t("nav_dashboard"), icon: LayoutDashboard },
+    { href: "/appointments", label: t("nav_appointments"), icon: CalendarClock },
+    { href: "/patients", label: t("nav_patients"), icon: Users },
+    { href: "/prescriptions", label: t("nav_prescriptions"), icon: FileText },
+    { href: "/print-queue", label: t("nav_print_queue"), icon: Printer },
     ...(isPlatformAdmin
-      ? [{ href: "/admin", label: "Platform Admin", icon: Building2 }]
+      ? [{ href: "/admin", label: t("nav_platform_admin"), icon: Building2 }]
       : role === "doctor"
-        ? [{ href: "/clinic-admin", label: "Clinic Admin", icon: Settings }]
+        ? [{ href: "/clinic-admin", label: t("nav_clinic_admin"), icon: Settings }]
         : []),
   ];
 
@@ -122,11 +123,18 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
         <div className="border-t p-4">
           <div className="mb-2 px-3 text-xs text-muted-foreground truncate">{user.email}</div>
           <button
+            onClick={() => setLang(lang === "en" ? "hi" : "en")}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors mb-1"
+          >
+            <span className="text-base leading-none">🌐</span>
+            {t("lang_toggle")}
+          </button>
+          <button
             onClick={() => signOut().then(() => router.push("/login"))}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
             <LogOut className="h-4 w-4" />
-            Sign Out
+            {t("nav_sign_out")}
           </button>
         </div>
       </aside>
@@ -142,8 +150,10 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DoctorProvider>
-      <LayoutInner>{children}</LayoutInner>
-    </DoctorProvider>
+    <LanguageProvider>
+      <DoctorProvider>
+        <LayoutInner>{children}</LayoutInner>
+      </DoctorProvider>
+    </LanguageProvider>
   );
 }
